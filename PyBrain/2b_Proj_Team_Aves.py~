@@ -1,0 +1,134 @@
+#############################################
+# Program: 2a_Proj_Game_Min.py
+#
+# Notes:
+#
+#
+#
+#
+# Date:
+#
+#############################################
+
+import numpy as np
+from pandas import Series, DataFrame
+import pandas as pd
+import os as os
+from datetime import datetime, timedelta
+
+days_ahead = 1
+year = '2016'
+DateAsOf = pd.to_datetime('2016-03-15')
+regulation_minutes = 240
+filen = 'proj_min_for_1days_' +str(DateAsOf.date())
+MP = 'MP_Ave_LB14'
+
+n_games_lookback = 0
+num_stats = ['MP', 'FG', 'FGA', 'FG%', '3P', '3PA', '3P%', 'FT', 'FTA', 'FT%', 'ORB', 'DRB', 'TRB', 'AST', 'STL', 'BLK', 'TOV', 'PF', 'PTS', '+/-']
+bs_stats = ['FG', 'FGA', 'FG%', '3P', '3PA', '3P%', 'FT', 'FTA', 'FT%', 'ORB', 'DRB', 'TRB', 'AST', 'STL', 'BLK', 'TOV', 'PF', 'PTS', '+/-']
+ag_stats = ['mean']
+pred_stats = [bs_stat+'_'+ag_stat for ag_stat in ag_stats for bs_stat in bs_stats]
+SRS_Vars = ['Tm', 'MOV', 'SOS', 'SRS', 'N_GAME', 'N_HOME', 'N_AWAY', 'WIN', 'LOSS']
+segababa_Vars = ['Tm', 'gb2b', 'g3i4', 'g4i5']
+houses = ['HOME', 'AWAY']
+
+team_nm = {
+    'Atlanta Hawks'           :'ATL', 
+    'Boston Celtics'          :'BOS',
+    'Brooklyn Nets'           :'BRK',
+    'Charlotte Hornets'       :'CHO',
+    'Chicago Bulls'           :'CHI',
+    'Cleveland Cavaliers'     :'CLE',
+    'Dallas Mavericks'        :'DAL',
+    'Denver Nuggets'          :'DEN',
+    'Detroit Pistons'         :'DET',
+    'Golden State Warriors'   :'GSW',
+    'Houston Rockets'         :'HOU',
+    'Indiana Pacers'          :'IND',
+    'Los Angeles Clippers'    :'LAC',
+    'Los Angeles Lakers'      :'LAL',
+    'Memphis Grizzlies'       :'MEM',
+    'Miami Heat'              :'MIA',
+    'Milwaukee Bucks'         :'MIL',
+    'Minnesota Timberwolves'  :'MIN',
+    'New Orleans Pelicans'    :'NOP',
+    'New York Knicks'         :'NYK',
+    'Oklahoma City Thunder'   :'OKC',
+    'Orlando Magic'           :'ORL',
+    'Philadelphia 76ers'      :'PHI',
+    'Phoenix Suns'            :'PHO',
+    'Portland Trail Blazers'  :'POR',
+    'Sacramento Kings'        :'SAC',
+    'San Antonio Spurs'       :'SAS',
+    'Toronto Raptors'         :'TOR',
+    'Utah Jazz'               :'UTA',
+    'Washington Wizards'      :'WAS'}
+
+game_list = pd.read_csv('Data/Box_Scores/' + year + '/Game_List_' + year + '.csv', dtype={'Away_PTS': np.object, 'Home_PTS': np.object})
+game_list['Date'] = pd.to_datetime(game_list['Date'])
+game_list['DateDiff'] = game_list['Date'] - DateAsOf
+game_list = game_list[['Date', 'Away', 'Home']].loc[(game_list['DateDiff']>timedelta(0)) & (game_list['DateDiff']<=timedelta(days_ahead))].copy()
+game_list['AWAY_Tm'] = game_list['Away'].replace(to_replace=team_nm)
+game_list['HOME_Tm'] = game_list['Home'].replace(to_replace=team_nm)
+
+player_min = pd.read_csv('Data/ProjMin/' + filen + '.csv')
+player_tm = dict(set(zip(player_min['Players'], player_min['Tm'])))
+
+# groupby team date and norm min by 240
+player_min_gb = player_min.groupby(by=['Date', 'Tm'])
+adj_player_min = []
+for key, data in player_min_gb:
+    gb_data = data.copy()
+    gb_data[MP] = gb_data[MP]*(regulation_minutes/sum(gb_data[MP]))
+    adj_player_min.append( gb_data )
+adj_player_min = pd.concat( adj_player_min )
+player_min = adj_player_min
+
+player_stats = pd.read_csv('Lines/Input_Files/Per_36_' + year + '_Rolling_Ave_' + str(DateAsOf.date()) + '.csv')
+player_stats['Tm'] = player_stats['Players'].replace(to_replace=player_tm)
+player_stats_gb = player_stats.groupby(by='Tm')
+last_games = {}
+for Tm, games in player_stats_gb:
+    last_game = max(games['Date'])
+    last_games.update({Tm: last_game})
+
+player_stats['Last_Game'] = player_stats['Tm'].replace(to_replace=last_games)
+player_stats = player_stats.loc[player_stats['Date']==player_stats['Last_Game']].copy()
+player_stats = player_stats[['Players', 'Last_Game'] + [bs_stat+'_'+ag_stat for bs_stat in bs_stats for ag_stat in ag_stats]]
+
+player_stats = pd.merge(player_stats, player_min, how='right', on='Players')
+
+for bs_stat in bs_stats: 
+    for ag_stat in ag_stats:
+        player_stats[bs_stat+'_'+ag_stat] = player_stats[MP]*player_stats[bs_stat+'_'+ag_stat]/36
+
+player_stats_gb = player_stats.groupby(by=['Date','Tm', 'Last_Game'])
+team_stats = player_stats_gb[[MP] + [bs_stat+'_'+ag_stat for bs_stat in bs_stats for ag_stat in ag_stats]].sum().copy()
+team_stats.reset_index(inplace=True)
+
+# need to recalc %
+pct_stats = ['FG', '3P', 'FT']
+for pct_stat in pct_stats:
+    for ag_stat in ag_stats:
+        team_stats[pct_stat+'%'+'_'+ag_stat] = team_stats[pct_stat+'_'+ag_stat] / team_stats[pct_stat+'A'+'_'+ag_stat]
+
+srs = pd.read_csv('Data/All_SRS_Calc_' + year + '_LB' + str(n_games_lookback) + '_' + str(DateAsOf.date()) + '.csv')
+srs['Tm'] = srs['Team'].replace(team_nm)
+srs = srs[['DateAsOf'] + SRS_Vars].rename(columns={'DateAsOf': 'Date'})
+srs['Date'] = pd.to_datetime(srs['Date'])
+srs = srs[SRS_Vars].loc[srs['Date']==max(srs['Date'])].copy()
+
+team_stats = pd.merge(team_stats, srs, how='left', on='Tm')
+team_stats['Date'] = pd.to_datetime(team_stats['Date'])
+
+segababa = pd.read_csv('Data/Input_Files/SEGABABA_' + year + '.csv')
+segababa['Tm'] = segababa['Team'].replace(team_nm)
+segababa = segababa [['Date'] + segababa_Vars]
+segababa['Date'] = pd.to_datetime(segababa['Date'])
+
+for house in houses:
+    var_dict = dict(zip(SRS_Vars + pred_stats, [house+'_'+SRS_Var for SRS_Var in SRS_Vars] + [house+'_'+ pred_stat for pred_stat in pred_stats]))
+    game_list = pd.merge(game_list, team_stats.rename(columns=var_dict), how='left', on=['Date', house+'_Tm'])
+    game_list = pd.merge(game_list, segababa.rename(columns=dict(zip(segababa_Vars, [house+'_'+segababa_Var for segababa_Var in segababa_Vars]))), how='left', on=['Date', house+'_Tm'])
+
+game_list.to_csv('Data/Input_Files/min_wghted_hist_proj_' + year + '_' + str(DateAsOf.date()) + '.csv', index=False)

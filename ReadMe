@@ -1,0 +1,49 @@
+To run:
+    Extract in a directory and can run straight.  basketball-reference.com does not all data scraping so please be 
+    conscientious when running Pull_Box_Scores.py.
+
+Programs: 
+    Input Files:
+    1) Pull_Box_Scores.py
+        - downloads box scores and updates schedules and scores under /Lines/Box_Scores
+        - able to run back to at least 2012
+        - set year and sleep seconds between pulls before running at bottom
+        - overwrites Data/game_list_<Year>.csv and downloads any new box scores
+    2) SRS_By_Day_v3.py
+        - Calculates rolling SRS
+        - uses 1) as input
+        - see folliwng for description of SRS: http://www.basketball-reference.com/blog/?p=39
+        - set year at the top
+    3) Rolling_Player_Aves.py
+        - Calculates rolling player stats
+        - uses 1) as input
+    4) Per36_Min_W_Team_Aves.py
+        - Calculates rolling per 36 aves
+        - uses 3) as input
+    5) Id_SEGABABA_v2.py
+        - Identifies back to backs\4 in 5s\etc.
+        - uses 1) as input
+        - only needs to be run once per year
+    6) Project_Minutes.py
+        - uses 1) as input
+        - get minutes aves for different look backs
+
+    PyBrain:
+    1) 1_Input_File.py 
+        - creates PyBrain input file
+    2) 2a_Proj_Game_Min.py 
+        - This creates a file that averages player minutes based on some look back you can specify
+        - you must manually update the date thru here 
+    3) 2b_Proj_Team_Aves.py 
+        - Take the output from the last program then make manual adjustments based off of info here: http://www.rotoworld.com/teams/injuries/nba/all/ 
+        - yeah your not gonna do that right.  Just ignore that last point
+        - if for some reason you do decide to make manual adjustments to the project file (generally moving the averages to 0 cause they're injured) rename the file and adjust
+            the filen variable appropriately.  This program will then renormalize the remaining minutes to 240
+        - you must manually update the date thru here 
+    4) 3_nnet_on_spread_test.py 
+        - you must manually update the date thru here 
+        - also specify what date you want to use as the training date
+    5) 4_ass_results_test.py 
+        - Assesses results
+        - As you can see from the hordes of commented out code, some of the files I didn't give 
+        - Here's a site with historic betting spread info: http://www.covers.com/sports/nba/matchups
